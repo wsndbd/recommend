@@ -3,6 +3,7 @@ __author__ = 'paldinzhang'
 import csv
 import sys
 import logging
+import math
 
 reload(sys)
 sys.setdefaultencoding('utf8')
@@ -39,11 +40,40 @@ if __name__ == "__main__":
         if line[1] not in itemUsers:
             itemUsers[line[1]] = []
         itemUsers[line[1]].append(line[0])
-        if i > 100:
+        if i > 1000:
             break
-    print itemUsers
+    #print itemUsers
     #计算n(u)和相关度矩阵
     N = {}
     C = {}
-    for item, users in itemUsers:
-       print item, users 
+    for item, users in itemUsers.iteritems():
+        for u in users:
+            if u not in N:
+                N[u] = 0
+            N[u] += 1
+            for v in users:
+                if u == v:
+                    continue
+                if v not in N:
+                    N[v] = 0
+                N[v] += 1
+                if u not in C:
+                    C[u] = {}
+                if v not in C[u]:
+                    C[u][v] = 0
+                C[u][v] += 1
+    W = {}
+    for u, r in C.iteritems():
+        for v, cuv in r.iteritems():
+            if u not in W:
+                W[u] = {}
+            if v not in W[u]:
+                W[u][v] = 0
+            W[u][v] = cuv / math.sqrt(N[u] * N[v])
+    #按测试数据计算分数 格式 uid,iid
+    K = 80
+    for v, wuv in sorted(W[u].iteritems, key = itemgetter(1), reverse = True):
+        k = 0
+        if k < K:
+
+    print W
