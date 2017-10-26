@@ -82,6 +82,9 @@ if __name__ == "__main__":
             W[u][v] = cuv / math.sqrt(N[u] * N[v])
     #按测试数据计算分数 格式 uid,iid
     K = 80
+    reader = csv.reader(file("../test.csv", "r"))
+    for i, line in enumerate(reader):
+         
     #for v, wuv in sorted(W[u].iteritems, key = itemgetter(1), reverse = True):
     #    k = 0
     #    if k < K:
