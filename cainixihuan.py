@@ -4,6 +4,7 @@ import csv
 import sys
 import logging
 import math
+import operator
 
 reload(sys)
 sys.setdefaultencoding('utf8')
@@ -47,11 +48,12 @@ if __name__ == "__main__":
             userItems[line[0]] = {}
         if line[1] not in userItems[line[0]]:
             userItems[line[0]][line[1]] = []
-        userItems[line[0]][line[1]].append([line[2], line[3]])
+        userItems[line[0]][line[1]].append(line[2])
+        userItems[line[0]][line[1]].append(line[3])
 
-        if i > 10:
-            break
-    print userItems
+#        if i > 1000:
+#            break
+    #print userItems
     #print itemUsers
     #计算n(u)和相关度矩阵
     N = {}
@@ -80,13 +82,32 @@ if __name__ == "__main__":
             if v not in W[u]:
                 W[u][v] = 0
             W[u][v] = cuv / math.sqrt(N[u] * N[v])
+    #print W
+    #for v, wuv in sorted(W['0'].iteritems(), key = operator.itemgetter(1), reverse = True):
+    #    print v, wuv
     #按测试数据计算分数 格式 uid,iid
+    rank = {}
     K = 80
     reader = csv.reader(file("../test.csv", "r"))
     for i, line in enumerate(reader):
-         
-    #for v, wuv in sorted(W[u].iteritems, key = itemgetter(1), reverse = True):
-    #    k = 0
-    #    if k < K:
-
-    #print W
+        if 0 == i:
+            continue
+        k = 0
+        iid = line[1]
+        uid = line[0]
+        if line[0] not in rank:
+            rank[uid] = {}
+        if iid not in rank[uid]:
+            rank[uid][iid] = 0
+        if uid not in W:
+            continue
+        for v, wuv in sorted(W[uid].iteritems(), key = operator.itemgetter(1), reverse = True):
+            if k < K:
+                if iid in userItems[v]:
+                    rank[uid][iid] += wuv * float(userItems[v][iid][0])
+                    k += 1
+        if 0 == k:
+            rank[uid][iid] = 0
+        else:
+            rank[uid][iid] /= k
+    print rank
