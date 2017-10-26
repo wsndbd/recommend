@@ -32,16 +32,26 @@ if __name__ == "__main__":
 #    print rowCount
 #    print len(open("../train.csv").readlines())
     itemUsers = {}
+    userItems = {}
     #uid,iid,score,time
     #first build inverse table for item to user
     for i, line in enumerate(reader):
         if 0 == i:
             continue
+        #建立商品到用户的映射
         if line[1] not in itemUsers:
             itemUsers[line[1]] = []
         itemUsers[line[1]].append(line[0])
-        if i > 1000:
+        #建立用户到商品的映射
+        if line[0] not in userItems:
+            userItems[line[0]] = {}
+        if line[1] not in userItems[line[0]]:
+            userItems[line[0]][line[1]] = []
+        userItems[line[0]][line[1]].append([line[2], line[3]])
+
+        if i > 10:
             break
+    print userItems
     #print itemUsers
     #计算n(u)和相关度矩阵
     N = {}
@@ -72,8 +82,8 @@ if __name__ == "__main__":
             W[u][v] = cuv / math.sqrt(N[u] * N[v])
     #按测试数据计算分数 格式 uid,iid
     K = 80
-    for v, wuv in sorted(W[u].iteritems, key = itemgetter(1), reverse = True):
-        k = 0
-        if k < K:
+    #for v, wuv in sorted(W[u].iteritems, key = itemgetter(1), reverse = True):
+    #    k = 0
+    #    if k < K:
 
-    print W
+    #print W
