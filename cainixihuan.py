@@ -102,15 +102,18 @@ if __name__ == "__main__":
         if uid not in W:
             continue
         for v, wuv in sorted(W[uid].iteritems(), key = operator.itemgetter(1), reverse = True):
+            #print "uid", uid, "iid", iid, "v", v, "wuv", wuv
             if k < K:
                 if iid in userItems[v]:
                     rank[uid][iid] += wuv * float(userItems[v][iid][0])
                     k += 1
+                    print "uid", uid, "vid", v, "iid", iid, "score", userItems[v][iid][0], "rank", rank[uid][iid], "k", k
         if 0 == k:
-            rank[uid][iid] = 0
+            rank[uid][iid] = 0.0
         else:
-            rank[uid][iid] /= k
-    print rank
+            rank[uid][iid] /= float(k)
+        print "uid", uid, "iid", iid, "rank", rank[uid][iid], "k", k
+    #print rank
     testFile = open("test.csv", "w")
     writer = csv.writer(testFile)
     writer.writerow(['uid', 'iid', 'score'])
