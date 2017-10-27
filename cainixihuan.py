@@ -51,8 +51,8 @@ if __name__ == "__main__":
         userItems[line[0]][line[1]].append(line[2])
         userItems[line[0]][line[1]].append(line[3])
 
-#        if i > 1000:
-#            break
+        if i > 10000:
+            break
     #print userItems
     #print itemUsers
     #计算n(u)和相关度矩阵
@@ -111,3 +111,10 @@ if __name__ == "__main__":
         else:
             rank[uid][iid] /= k
     print rank
+    testFile = open("test.csv", "w")
+    writer = csv.writer(testFile)
+    writer.writerow(['uid', 'iid', 'score'])
+    for u, vs in rank.iteritems():
+        for v, s in rank[u].iteritems():
+            writer.writerow([u, v, s])
+    testFile.close() 
