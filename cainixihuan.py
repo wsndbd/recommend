@@ -29,30 +29,37 @@ def silentRemove(filename):
 
 if __name__ == "__main__":
     reader = csv.reader(file("../train.csv", "r"))
-#    rowCount = sum(1 for row in reader)
-#    print rowCount
-#    print len(open("../train.csv").readlines())
     itemUsers = {}
     userItems = {}
+    userAvgScore = {} #用户的平均分
     #uid,iid,score,time
     #first build inverse table for item to user
     for i, line in enumerate(reader):
         if 0 == i:
             continue
+        uid = line[0]
+        iid = line[1]
+        score = line[2]
+        timeStamp = line[3]
         #建立商品到用户的映射
-        if line[1] not in itemUsers:
-            itemUsers[line[1]] = []
-        itemUsers[line[1]].append(line[0])
+        if iid not in itemUsers:
+            itemUsers[iid] = []
+        itemUsers[iid].append(uid)
         #建立用户到商品的映射
-        if line[0] not in userItems:
-            userItems[line[0]] = {}
-        if line[1] not in userItems[line[0]]:
-            userItems[line[0]][line[1]] = []
-        userItems[line[0]][line[1]].append(line[2])
-        userItems[line[0]][line[1]].append(line[3])
+        if uid not in userItems:
+            userItems[uid] = {}
+            userAvgScore[uid] = 0
+        userAvgScore[uid] += int(score)
+        if iid not in userItems[uid]:
+            userItems[uid][iid] = []
+        userItems[uid][iid].append(score)
+        userItems[uid][iid].append(timeStamp)
 
-        if i > 10000:
-            break
+        #if i > 10000:
+        #    break
+    for i, v in userAvgScore.iteritems():
+        userAvgScore[i] = float(v) / len(userItems[i])
+        print "i", i, "v", v, "count", len(userItems[i]), "avg score", userAvgScore[i]
     #print userItems
     #print itemUsers
     #计算n(u)和相关度矩阵
@@ -101,18 +108,22 @@ if __name__ == "__main__":
             rank[uid][iid] = 0
         if uid not in W:
             continue
+        scoreSum = 0
+        similaritySum = 0
         for v, wuv in sorted(W[uid].iteritems(), key = operator.itemgetter(1), reverse = True):
             #print "uid", uid, "iid", iid, "v", v, "wuv", wuv
             if k < K:
                 if iid in userItems[v]:
-                    rank[uid][iid] += wuv * float(userItems[v][iid][0])
+                    scoreSum += wuv * float(float(userItems[v][iid][0]) - userAvgScore[v])
+                    similaritySum += wuv
                     k += 1
                     print "uid", uid, "vid", v, "iid", iid, "score", userItems[v][iid][0], "rank", rank[uid][iid], "k", k
         if 0 == k:
             rank[uid][iid] = 0.0
         else:
-            rank[uid][iid] /= float(k)
-        print "uid", uid, "iid", iid, "rank", rank[uid][iid], "k", k
+            rank[uid][iid] = userAvgScore[uid] + scoreSum / similaritySum
+        print "uid", uid, "avgScore", userAvgScore[uid], "iid", iid, "rank", rank[uid][iid], "k", k, "scoreSum", scoreSum, "similaritySum", similaritySum
+    quit()
     #print rank
     testFile = open("test.csv", "w")
     writer = csv.writer(testFile)
