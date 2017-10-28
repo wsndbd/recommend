@@ -5,6 +5,7 @@ import sys
 import logging
 import math
 import operator
+import sqlite3
 
 reload(sys)
 sys.setdefaultencoding('utf8')
@@ -32,16 +33,37 @@ if __name__ == "__main__":
     itemUsers = {}
     userItems = {}
     userAvgScore = {} #用户的平均分
+    conn = sqlite3.connect("./dict.db")
+    cursor = conn.cursor()
+    cursor.execute("select name from sqlite_master where type = 'table' and name = 'item_users'")
+    if 0 == len(cursor.fetchall()):
+        #table not exist
+        cursor.execute('''create table item_users
+        (iid INT PRIMARY KEY NOT NULL,
+        uids TEXT NOT NULL      
+        );''')
     #uid,iid,score,time
     #first build inverse table for item to user
+    next(reader) #跳过表头第一行
     for i, line in enumerate(reader):
-        if 0 == i:
-            continue
         uid = line[0]
         iid = line[1]
         score = line[2]
         timeStamp = line[3]
+        iid2uids = []
         #建立商品到用户的映射
+        cursor.execute("select uids from item_users where iid = ?", (iid,))
+        iid2uids = cursor.fetchall()
+        if 0 == len(iid2uids):
+            cursor.execute("insert into item_users values(?, ?)", (iid, uid))
+        else:
+            #print "iid2uids", iid2uids, iid2uids[0], list(iid2uids[0]), list(iid2uids[0])[0]
+            #返回结果是一个只有一个元素的list,list只有一个tuple的元素,将tuple转成list,再取这个list的第一个元素才是真正的字符吕，我汗
+            iid2uids = list(iid2uids[0])[0]
+            iid2uids += "," + uid
+            cursor.execute("update item_users set uids = ? where iid = ?", (iid2uids, iid))
+        cursor.execute("select * from item_users where iid = ?", (iid,))
+        print cursor.fetchall()
         if iid not in itemUsers:
             itemUsers[iid] = []
         itemUsers[iid].append(uid)
@@ -55,8 +77,9 @@ if __name__ == "__main__":
         userItems[uid][iid].append(score)
         userItems[uid][iid].append(timeStamp)
 
-        #if i > 10000:
-        #    break
+        if i > 10000:
+            break
+    quit()
     for i, v in userAvgScore.iteritems():
         userAvgScore[i] = float(v) / len(userItems[i])
         print "i", i, "v", v, "count", len(userItems[i]), "avg score", userAvgScore[i]
