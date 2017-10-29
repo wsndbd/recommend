@@ -28,6 +28,14 @@ def silentRemove(filename):
         if e.errno != errno.ENOENT:
             raise
 
+def tableExist(cursor, tableName):
+    cursor.execute("select name from sqlite_master where type = 'table' and name = '?'", (tableName))
+    if 0 == len(cursor.fetchall()):
+        return False
+    else:
+        return True
+
+
 if __name__ == "__main__":
     reader = csv.reader(file("../train.csv", "r"))
     itemUsers = {}
@@ -37,6 +45,7 @@ if __name__ == "__main__":
     cursor = conn.cursor()
     cursor.execute("select name from sqlite_master where type = 'table' and name = 'item_users'")
     if 0 == len(cursor.fetchall()):
+    if not tableExist(cursor, "item_users"):
         #table not exist
         cursor.execute('''create table item_users
         (iid INT PRIMARY KEY NOT NULL,
@@ -52,6 +61,7 @@ if __name__ == "__main__":
         timeStamp = line[3]
         iid2uids = []
         #建立商品到用户的映射
+        #item_users iid uid,uid,...
         cursor.execute("select uids from item_users where iid = ?", (iid,))
         iid2uids = cursor.fetchall()
         if 0 == len(iid2uids):
@@ -62,12 +72,18 @@ if __name__ == "__main__":
             iid2uids = list(iid2uids[0])[0]
             iid2uids += "," + uid
             cursor.execute("update item_users set uids = ? where iid = ?", (iid2uids, iid))
-        cursor.execute("select * from item_users where iid = ?", (iid,))
-        print cursor.fetchall()
-        if iid not in itemUsers:
-            itemUsers[iid] = []
-        itemUsers[iid].append(uid)
+        #cursor.execute("select * from item_users where iid = ?", (iid,))
+        #print cursor.fetchall()
         #建立用户到商品的映射
+        if not tableExist(cursor, "user_items"):
+            cursor.execute('''create table user_items(
+            uid INT PRIMARY KEY NOT NULL,
+            iid INT PRIMARY KEY NOT NULL,
+            score INT NOT NULL,
+            timestamp INT
+            );
+            ''')
+        cursor.execute()
         if uid not in userItems:
             userItems[uid] = {}
             userAvgScore[uid] = 0
