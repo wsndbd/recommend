@@ -43,14 +43,13 @@ if __name__ == "__main__":
     userAvgScore = {} #用户的平均分
     conn = sqlite3.connect("./dict.db")
     cursor = conn.cursor()
-    cursor.execute("select name from sqlite_master where type = 'table' and name = 'item_users'")
-    if 0 == len(cursor.fetchall()):
-    if not tableExist(cursor, "item_users"):
-        #table not exist
-        cursor.execute('''create table item_users
-        (iid INT PRIMARY KEY NOT NULL,
-        uids TEXT NOT NULL      
-        );''')
+    #table not exist
+    cursor.execute("drop table item_users")
+    cursor.execute("drop table user_item")
+    cursor.execute('''create table if not exists item_users
+    (iid INT PRIMARY KEY NOT NULL,
+    uids TEXT NOT NULL      
+    );''')
     #uid,iid,score,time
     #first build inverse table for item to user
     next(reader) #跳过表头第一行
@@ -75,27 +74,24 @@ if __name__ == "__main__":
         #cursor.execute("select * from item_users where iid = ?", (iid,))
         #print cursor.fetchall()
         #建立用户到商品的映射
-        if not tableExist(cursor, "user_items"):
-            cursor.execute('''create table user_items(
-            uid INT PRIMARY KEY NOT NULL,
-            iid INT PRIMARY KEY NOT NULL,
-            score INT NOT NULL,
-            timestamp INT
-            );
-            ''')
-        cursor.execute()
-        if uid not in userItems:
-            userItems[uid] = {}
-            userAvgScore[uid] = 0
-        userAvgScore[uid] += int(score)
-        if iid not in userItems[uid]:
-            userItems[uid][iid] = []
-        userItems[uid][iid].append(score)
-        userItems[uid][iid].append(timeStamp)
-
-        if i > 10000:
+        cursor.execute('''create table if not exists user_item(
+        uid INT NOT NULL,
+        iid INT NOT NULL,
+        score INT NOT NULL,
+        timestamp INT,
+        PRIMARY KEY(uid, iid)
+        );
+        ''')
+        print uid, iid, score, timeStamp
+        cursor.execute("insert into user_item values(?, ?, ?, ?)", (uid, iid, score, timeStamp))
+        cursor.execute("select * from user_item")
+        print cursor.fetchall()
+        if i > 100:
             break
-    quit()
+
+    #create index
+    cursor.execute("create index if not exists index_on_item_users on item_users(iid)")
+    cursor.execute("create index if not exists index_on_user_item on user_item(uid, iid)")
     for i, v in userAvgScore.iteritems():
         userAvgScore[i] = float(v) / len(userItems[i])
         print "i", i, "v", v, "count", len(userItems[i]), "avg score", userAvgScore[i]
