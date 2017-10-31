@@ -95,6 +95,9 @@ if __name__ == "__main__":
     for i, v in userAvgScore.iteritems():
         userAvgScore[i] = float(v) / len(userItems[i])
         print "i", i, "v", v, "count", len(userItems[i]), "avg score", userAvgScore[i]
+    cursor.execute('''create view if not exists user_score as select
+            uid, avg(score) as avgscore from user_item order by uid 
+            ''')
     #print userItems
     #print itemUsers
     #计算n(u)和相关度矩阵
