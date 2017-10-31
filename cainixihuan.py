@@ -86,7 +86,7 @@ if __name__ == "__main__":
         cursor.execute("insert into user_item values(?, ?, ?, ?)", (uid, iid, score, timeStamp))
         cursor.execute("select * from user_item")
         print cursor.fetchall()
-        if i > 100:
+        if i > 1000:
             break
 
     #create index
@@ -96,11 +96,13 @@ if __name__ == "__main__":
         userAvgScore[i] = float(v) / len(userItems[i])
         print "i", i, "v", v, "count", len(userItems[i]), "avg score", userAvgScore[i]
     cursor.execute('''create view if not exists user_score as select
-            uid, avg(score) as avgscore from user_item order by uid 
+            uid, avg(score) as avgscore from user_item group by uid order by uid 
             ''')
     #print userItems
     #print itemUsers
     #计算n(u)和相关度矩阵
+    #id1,id2相关度，即打过分的物品共有相同的多少个
+    cursor.execute("select count(*) from (select iid, count(iid) from user_item where uid = 1 or uid = 0 group by iid having count(iid) > 1)")
     N = {}
     C = {}
     for item, users in itemUsers.iteritems():
