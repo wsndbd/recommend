@@ -1,5 +1,4 @@
-# -*- coding:utf-8 -*-
-__author__ = 'paldinzhang'
+# -*- coding:utf-8 -*- __author__ = 'paldinzhang'
 import csv
 import sys
 import logging
@@ -38,18 +37,18 @@ def tableExist(cursor, tableName):
 
 if __name__ == "__main__":
     reader = csv.reader(file("../train.csv", "r"))
-    itemUsers = {}
-    userItems = {}
-    userAvgScore = {} #用户的平均分
     conn = sqlite3.connect("./dict.db")
     cursor = conn.cursor()
     #table not exist
-    cursor.execute("drop table item_users")
-    cursor.execute("drop table user_item")
-    cursor.execute('''create table if not exists item_users
-    (iid INT PRIMARY KEY NOT NULL,
-    uids TEXT NOT NULL      
-    );''')
+    cursor.execute("drop table if exists user_item")
+    cursor.execute('''create table if not exists user_item(
+    uid INT NOT NULL,
+    iid INT NOT NULL,
+    score INT NOT NULL,
+    timestamp INT,
+    PRIMARY KEY(uid, iid)
+    );
+    ''')
     #uid,iid,score,time
     #first build inverse table for item to user
     next(reader) #跳过表头第一行
@@ -58,77 +57,38 @@ if __name__ == "__main__":
         iid = line[1]
         score = line[2]
         timeStamp = line[3]
-        iid2uids = []
-        #建立商品到用户的映射
-        #item_users iid uid,uid,...
-        cursor.execute("select uids from item_users where iid = ?", (iid,))
-        iid2uids = cursor.fetchall()
-        if 0 == len(iid2uids):
-            cursor.execute("insert into item_users values(?, ?)", (iid, uid))
-        else:
-            #print "iid2uids", iid2uids, iid2uids[0], list(iid2uids[0]), list(iid2uids[0])[0]
-            #返回结果是一个只有一个元素的list,list只有一个tuple的元素,将tuple转成list,再取这个list的第一个元素才是真正的字符吕，我汗
-            iid2uids = list(iid2uids[0])[0]
-            iid2uids += "," + uid
-            cursor.execute("update item_users set uids = ? where iid = ?", (iid2uids, iid))
-        #cursor.execute("select * from item_users where iid = ?", (iid,))
-        #print cursor.fetchall()
         #建立用户到商品的映射
-        cursor.execute('''create table if not exists user_item(
-        uid INT NOT NULL,
-        iid INT NOT NULL,
-        score INT NOT NULL,
-        timestamp INT,
-        PRIMARY KEY(uid, iid)
-        );
-        ''')
-        print uid, iid, score, timeStamp
+        #print uid, iid, score, timeStamp
         cursor.execute("insert into user_item values(?, ?, ?, ?)", (uid, iid, score, timeStamp))
-        cursor.execute("select * from user_item")
-        print cursor.fetchall()
+        #cursor.execute("select * from user_item")
+        #print cursor.fetchall()
         if i > 1000:
             break
 
     #create index
-    cursor.execute("create index if not exists index_on_item_users on item_users(iid)")
+    cursor.execute("drop index if exists index_on_user_item")
     cursor.execute("create index if not exists index_on_user_item on user_item(uid, iid)")
-    for i, v in userAvgScore.iteritems():
-        userAvgScore[i] = float(v) / len(userItems[i])
-        print "i", i, "v", v, "count", len(userItems[i]), "avg score", userAvgScore[i]
+    cursor.execute("drop view if exists user_score")
     cursor.execute('''create view if not exists user_score as select
-            uid, avg(score) as avgscore from user_item group by uid order by uid 
+            uid, avg(score) as avg_score, count(iid) as count_iid from user_item group by uid order by uid 
             ''')
-    #print userItems
-    #print itemUsers
-    #计算n(u)和相关度矩阵
+    #cursor.execute("select avg_score from user_score")
+    #print cursor.fetchall()
+    #cursor.execute("select * from sqlite_master where tbl_name = 'user_score' and type = 'view'")
+    #print cursor.fetchall()
     #id1,id2相关度，即打过分的物品共有相同的多少个
-    cursor.execute("select count(*) from (select iid, count(iid) from user_item where uid = 1 or uid = 0 group by iid having count(iid) > 1)")
-    N = {}
-    C = {}
-    for item, users in itemUsers.iteritems():
-        for u in users:
-            if u not in N:
-                N[u] = 0
-            N[u] += 1
-            for v in users:
-                if u == v:
-                    continue
-                if v not in N:
-                    N[v] = 0
-                N[v] += 1
-                if u not in C:
-                    C[u] = {}
-                if v not in C[u]:
-                    C[u][v] = 0
-                C[u][v] += 1
-    W = {}
-    for u, r in C.iteritems():
-        for v, cuv in r.iteritems():
-            if u not in W:
-                W[u] = {}
-            if v not in W[u]:
-                W[u][v] = 0
-            W[u][v] = cuv / math.sqrt(N[u] * N[v])
+    cursor.execute("drop view if exists user_relativity")
+    cursor.execute("create view if not exists user_relativity as select u1.uid as uid1, u2.uid as uid2, count(u1.iid) as count_iid from user_item u1 inner join user_item u2 on u1.iid = u2.iid  where u1.uid <> u2.uid group by u1.uid, u2.uid")
+    #cursor.execute("select uid1 from user_relativity")
+    #print cursor.fetchall()
+    #计算n(u)和相关度矩阵*
+    #for u, r in C.iteritems():
+    #    for v, cuv in r.iteritems():
+    #        if u not in W:
+    #            W[u] = {}
+    #        if v not in W[u]:
+    #            W[u][v] = 0
+    #        W[u][v] = cuv / math.sqrt(N[u] * N[v])
     #print W
     #for v, wuv in sorted(W['0'].iteritems(), key = operator.itemgetter(1), reverse = True):
     #    print v, wuv
@@ -146,10 +106,13 @@ if __name__ == "__main__":
             rank[uid] = {}
         if iid not in rank[uid]:
             rank[uid][iid] = 0
-        if uid not in W:
-            continue
         scoreSum = 0
         similaritySum = 0
+        #计算相似度
+        print "uid", uid
+        cursor.execute("select uid2,count_iid from user_relativity where uid1  = ? order by count_iid desc", (uid,))
+        W = cursor.fetchall()
+        print "W", W
         for v, wuv in sorted(W[uid].iteritems(), key = operator.itemgetter(1), reverse = True):
             #print "uid", uid, "iid", iid, "v", v, "wuv", wuv
             if k < K:
@@ -163,7 +126,6 @@ if __name__ == "__main__":
         else:
             rank[uid][iid] = userAvgScore[uid] + scoreSum / similaritySum
         print "uid", uid, "avgScore", userAvgScore[uid], "iid", iid, "rank", rank[uid][iid], "k", k, "scoreSum", scoreSum, "similaritySum", similaritySum
-    quit()
     #print rank
     testFile = open("test.csv", "w")
     writer = csv.writer(testFile)
