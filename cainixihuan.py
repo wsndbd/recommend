@@ -112,15 +112,23 @@ if __name__ == "__main__":
         print "uid", uid
         cursor.execute("select uid2,count_iid from user_relativity where uid1  = ? order by count_iid desc", (uid,))
         W = cursor.fetchall()
-        print "W", W
-        for v, wuv in sorted(W[uid].iteritems(), key = operator.itemgetter(1), reverse = True):
-            #print "uid", uid, "iid", iid, "v", v, "wuv", wuv
+        cursor.execute("select avg_score, count_iid from user_score where uid = ?", (uid,))
+        ni = cursor.fetchall()[0][0]
+        avgScore = cursor.fetchall()[0][1]
+        for j, item in enumerate(W):
+            uid2 = item[0]         
+            print "uid2", uid2
+            cursor.execute("select count_iid from user_score where uid = ?", (uid2,))
+            nj = cursor.fetchall()[0][0]
+            print "nj", nj
+            wuv = item[1] / math.sqrt(ni * nj)
+            cursor.execute("select score")
+            scoreSum += wuv * 
             if k < K:
-                if iid in userItems[v]:
-                    scoreSum += wuv * float(float(userItems[v][iid][0]) - userAvgScore[v])
-                    similaritySum += wuv
-                    k += 1
-                    print "uid", uid, "vid", v, "iid", iid, "score", userItems[v][iid][0], "rank", rank[uid][iid], "k", k
+                scoreSum += wuv * float(float(userItems[v][iid][0]) - userAvgScore[v])
+                similaritySum += wuv
+                k += 1
+                print "uid", uid, "vid", v, "iid", iid, "score", userItems[v][iid][0], "rank", rank[uid][iid], "k", k
         if 0 == k:
             rank[uid][iid] = 0.0
         else:
