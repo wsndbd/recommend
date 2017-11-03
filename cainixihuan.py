@@ -112,9 +112,8 @@ if __name__ == "__main__":
         print "uid", uid
         cursor.execute("select uid2,count_iid from user_relativity where uid1  = ? order by count_iid desc", (uid,))
         W = cursor.fetchall()
-        cursor.execute("select avg_score, count_iid from user_score where uid = ?", (uid,))
+        cursor.execute("select count_iid from user_score where uid = ?", (uid,))
         ni = cursor.fetchall()[0][0]
-        avgScore = cursor.fetchall()[0][1]
         for j, item in enumerate(W):
             uid2 = item[0]         
             print "uid2", uid2
