@@ -1,4 +1,5 @@
 # -*- coding:utf-8 -*- __author__ = 'paldinzhang'
+import os
 import csv
 import sys
 import logging
@@ -6,6 +7,8 @@ import math
 import operator
 import sqlite3
 import collections
+import getopt
+import errno
 
 reload(sys)
 sys.setdefaultencoding('utf8')
@@ -37,43 +40,61 @@ def tableExist(cursor, tableName):
 
 
 if __name__ == "__main__":
-    reader = csv.reader(file("../train.csv", "r"))
+    reCreate = False
+    opts, args = getopt.getopt(sys.argv[1:], "c", [])
+    for o, a in opts:
+        print o, a
+        #recreate database
+        if "-c" == o:
+            print "fuck here"
+            reCreate = True 
+            silentRemove("./dict.db")
     conn = sqlite3.connect("./dict.db")
     cursor = conn.cursor()
     #table not exist
-    cursor.execute("drop table if exists user_item")
-    cursor.execute('''create table if not exists user_item(
-    uid INT NOT NULL,
-    iid INT NOT NULL,
-    score INT NOT NULL,
-    timestamp INT,
-    PRIMARY KEY(uid, iid)
-    );
-    ''')
-    #uid,iid,score,time
-    #first build inverse table for item to user
-    next(reader) #跳过表头第一行
-    for i, line in enumerate(reader):
-        uid = line[0]
-        iid = line[1]
-        score = line[2]
-        timeStamp = line[3]
-        #建立用户到商品的映射
-        #print uid, iid, score, timeStamp
-        print "(uid, iid, score, timeStamp)", (uid, iid, score, timeStamp)
-        cursor.execute("insert into user_item values(?, ?, ?, ?)", (uid, iid, score, timeStamp))
+    if reCreate:
+        print "fuck here"
+        f = open("../train.csv", "r")
+        reader = csv.reader(f)
+        cursor.execute('''create table if not exists user_item(
+        uid INT NOT NULL,
+        iid INT NOT NULL,
+        score INT NOT NULL,
+        timestamp INT,
+        PRIMARY KEY(uid, iid)
+        );
+        ''')
+        #uid,iid,score,time
+        #first build inverse table for item to user
+        next(reader) #跳过表头第一行
+        for i, line in enumerate(reader):
+            uid = line[0]
+            iid = line[1]
+            score = line[2]
+            timeStamp = line[3]
+            #建立用户到商品的映射
+            #print uid, iid, score, timeStamp
+            print "(uid, iid, score, timeStamp)", (uid, iid, score, timeStamp)
+            cursor.execute("insert into user_item values(?, ?, ?, ?)", (uid, iid, score, timeStamp))
+            if i > 1000:
+                break
+        f.close()
 
-    #create index
-    cursor.execute("drop index if exists index_on_user_item")
-    cursor.execute("create index if not exists index_on_user_item on user_item(uid, iid)")
-    cursor.execute("drop table if exists user_score")
-    cursor.execute('''create table if not exists user_score as select
+        #create index
+        cursor.execute("create index if not exists index_on_user_item_uid_iid on user_item(uid, iid)")
+        cursor.execute("create index if not exists index_on_user_item_uid on user_item(uid)")
+        cursor.execute("create index if not exists index_on_user_item_iid on user_item(iid)")
+
+        #建立item到user的表
+        cursor.execute("create table if not exists item_users as select iid, group_concat(uid) as uids from user_item group by iid")
+        cursor.execute("create index if not exists index_on_item_users_iid on item_users(iid)")
+        
+        cursor.execute('''create view if not exists user_score as select
             uid, avg(score) as avg_score, count(iid) as count_iid from user_item group by uid order by uid 
             ''')
+        cursor.execute("ANALYZE")
+
     #id1,id2相关度，即打过分的物品共有相同的多少个
-    cursor.execute("ANALYZE")
-    cursor.execute("drop table if exists user_relativity")
-    cursor.execute("create table if not exists user_relativity as select u1.uid as uid1, u2.uid as uid2, count(u1.iid) as count_iid from user_item u1 inner join user_item u2 on u1.iid = u2.iid  where u1.uid > u2.uid group by u1.uid, u2.uid")
     quit()
     #按测试数据计算分数 格式 uid,iid
     rank = collections.OrderedDict()
