@@ -9,6 +9,7 @@ import sqlite3
 import collections
 import getopt
 import errno
+import time
 
 reload(sys)
 sys.setdefaultencoding('utf8')
@@ -46,14 +47,12 @@ if __name__ == "__main__":
         print o, a
         #recreate database
         if "-c" == o:
-            print "fuck here"
             reCreate = True 
             silentRemove("./dict.db")
     conn = sqlite3.connect("./dict.db")
     cursor = conn.cursor()
     #table not exist
     if reCreate:
-        print "fuck here"
         f = open("../train.csv", "r")
         reader = csv.reader(f)
         cursor.execute('''create table if not exists user_item(
@@ -76,31 +75,51 @@ if __name__ == "__main__":
             #print uid, iid, score, timeStamp
             print "(uid, iid, score, timeStamp)", (uid, iid, score, timeStamp)
             cursor.execute("insert into user_item values(?, ?, ?, ?)", (uid, iid, score, timeStamp))
-            if i > 1000:
-                break
         f.close()
 
         #create index
+        print "create index if not exists index_on_user_item_uid_iid on user_item(uid, iid)..."
+        startTime = time.time()
         cursor.execute("create index if not exists index_on_user_item_uid_iid on user_item(uid, iid)")
+        print "time elapsed ", time.time() - startTime
+        print "create index if not exists index_on_user_item_uid on user_item(uid)..."
+        startTime = time.time()
         cursor.execute("create index if not exists index_on_user_item_uid on user_item(uid)")
+        print "time elapsed ", time.time() - startTime
+        print "create index if not exists index_on_user_item_iid on user_item(iid)..."
+        startTime = time.time()
         cursor.execute("create index if not exists index_on_user_item_iid on user_item(iid)")
+        print "time elapsed ", time.time() - startTime
 
         #建立item到user的表
+        print "create item_users..."
+        startTime = time.time()
         cursor.execute("create table if not exists item_users as select iid, group_concat(uid) as uids from user_item group by iid")
+        print "time elapsed ", time.time() - startTime
+        print "create index if not exists index_on_item_users_iid on item_users(iid)..."
+        startTime = time.time()
         cursor.execute("create index if not exists index_on_item_users_iid on item_users(iid)")
+        print "time elapsed ", time.time() - startTime
+        print "create index if not exists index_on_item_users_uids on item_users(uids)..."
+        startTime = time.time()
+        cursor.execute("create index if not exists index_on_item_users_uids on item_users(uids)")
+        print "time elapsed ", time.time() - startTime
         
         cursor.execute('''create view if not exists user_score as select
-            uid, avg(score) as avg_score, count(iid) as count_iid from user_item group by uid order by uid 
+            uid, avg(score) as avg_score, count(iid) as count_iid from user_item group by uid
             ''')
+        print "ANALYZE..."
+        startTime = time.time()
         cursor.execute("ANALYZE")
+        print "time elapsed ", time.time() - startTime
 
     #id1,id2相关度，即打过分的物品共有相同的多少个
-    quit()
-    #按测试数据计算分数 格式 uid,iid
     rank = collections.OrderedDict()
     K = 80
     reader = csv.reader(file("../test.csv", "r"))
     next(reader)
+    lastUid = 0
+    W = {}
     for i, line in enumerate(reader):
         k = 0
         iid = line[1]
@@ -113,6 +132,7 @@ if __name__ == "__main__":
         similaritySum = 0
         #计算相似度
         #找到自身的平均分及评价过的商品个数
+        print "select avg_score, count_iid from user_score where uid = %s" %(uid,)
         cursor.execute("select avg_score, count_iid from user_score where uid = ?", (uid,))
         row = cursor.fetchone()
         if not row:
@@ -121,39 +141,53 @@ if __name__ == "__main__":
         ni = row[1]
         print "i", i, "uid", uid, "selfAvgScore", selfAvgScore, "ni", ni 
         #找到和uid相关的所有用户,按相关度降序排序
-        cursor.execute("select uid2,count_iid from user_relativity where uid1  = ? order by count_iid desc", (uid,))
+        cursor.execute("select distinct uid from user_item where uid <> ?", (uid,))
+        if uid != lastUid:
+            W = {}
+            for row in cursor:
+                otherUid = row[0]
+                #比较头，中间，尾是否包含指定uid
+                cur1 = conn.cursor()
+                sql1 = "(uids||',' like '%s,%%' or ','||uids||',' like '%%,%s,%%' or ','||uids like '%%,%s')" %(uid, uid, uid)
+                sql2 = "(uids||',' like '%s,%%' or ','||uids||',' like '%%,%s,%%' or ','||uids like '%%,%s')" %(otherUid, otherUid, otherUid)
+                sql = "select count(*) from item_users where  " + sql1 + " and " + sql2
+                #print "sql", sql
+                cur1.execute(sql)
+                row1 = cur1.fetchone()
+                if not row1:
+                    continue
+                W[otherUid] = row1[0]
+                print "calc uid1", uid, "ohteruid", otherUid, "samecount", row1[0]
         #计算每个用户对iid的打分
-        for row in cursor:
-            uid2 = row[0]
-            sameCount = row[1]
-            print "uid2", uid2, "sameCount", sameCount
+        for u2, w in sorted(W.iteritems(), key = operator.itemgetter(1), reverse = True): 
+            uid2 = u2
+            sameCount = w
             #找到相关用户对应的平均分及评价物品的个数
-            cur1 = conn.cursor()
             cur1.execute("select avg_score, count_iid from user_score where uid = ?", (uid2,))
             row1 = cur1.fetchone()
             avgScore = row1[0]
             nj = row1[1]
-            print "uid2", uid2, "avgScore", avgScore, "nj", nj
             #相似度
             wuv = sameCount / math.sqrt(ni * nj)
+            print "uid", uid, "uid2", uid2, "avgScore", avgScore, "nj", nj, "sameCount", sameCount, "wuv", wuv
             if k < K:
-                print "uid2", uid2, "iid", iid
                 cur1.execute("select score from user_item where uid = ? and iid = ?", (uid2, iid))
                 row1 = cur1.fetchone()
                 if not row1:
                     continue
                 #相关用户对iid的打分
                 score = row1[0]
-                print "uid2", uid2, "iid", iid, "score", score
+                print "k", k, "uid2", uid2, "iid", iid, "score", score
                 scoreSum += wuv * float(float(score) - avgScore)
                 similaritySum += wuv
                 k += 1
+            else:
+                break
         if 0 == k:
             rank[uid][iid] = 0.0
         else:
             rank[uid][iid] = selfAvgScore + scoreSum / similaritySum
-        if i > 2:
-            break
+        lastUid = uid
     #print rank
     testFile = open("test.csv", "w")
     writer = csv.writer(testFile)
