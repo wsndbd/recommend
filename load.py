@@ -5,6 +5,7 @@ from scipy import sparse
 import numpy as np
 
 
+#data=pd.read_csv("train2.csv")
 data=pd.read_csv("../train.csv")
 ids = set()
 items = set()
@@ -21,7 +22,14 @@ for row in data.values:
 
 print len(ids),len(items)
 print max_id, max_item_id
-mat = sparse.dok_matrix((max_id+1,max_item_id+1), dtype=np.int)
+mat = sparse.lil_matrix((max_id+1,max_item_id+1), dtype=np.int)
 for row in data.values:
     mat[row[0], row[1]]=row[2]
 print mat.shape
+print "row[0]", mat[0,:]
+print "row[1]", mat[1,:]
+print mat[0,:] == mat[1,:]
+#csrMat = mat.tocsr()
+#print "csrMat", csrMat[0,:]
+a = mat.toarray()
+print "a",a

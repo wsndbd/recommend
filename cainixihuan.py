@@ -10,6 +10,9 @@ import collections
 import getopt
 import errno
 import time
+from scipy import sparse
+import numpy as np
+import pandas as pd
 
 reload(sys)
 sys.setdefaultencoding('utf8')
@@ -32,14 +35,6 @@ def silentRemove(filename):
         if e.errno != errno.ENOENT:
             raise
 
-def tableExist(cursor, tableName):
-    cursor.execute("select name from sqlite_master where type = 'table' and name = '?'", (tableName))
-    if None == cursor.fetchone():
-        return False
-    else:
-        return True
-
-
 if __name__ == "__main__":
     reCreate = False
     opts, args = getopt.getopt(sys.argv[1:], "c", [])
@@ -53,65 +48,26 @@ if __name__ == "__main__":
     cursor = conn.cursor()
     #table not exist
     if reCreate:
-        f = open("../train.csv", "r")
-        reader = csv.reader(f)
-        cursor.execute('''create table if not exists user_item(
-        uid INT NOT NULL,
-        iid INT NOT NULL,
-        score INT NOT NULL,
-        timestamp INT,
-        PRIMARY KEY(uid, iid)
-        );
-        ''')
+        data = pd.read_csv("../train2.csv")
         #uid,iid,score,time
-        #first build inverse table for item to user
-        next(reader) #跳过表头第一行
-        for i, line in enumerate(reader):
-            uid = line[0]
-            iid = line[1]
-            score = line[2]
-            timeStamp = line[3]
-            #建立用户到商品的映射
-            #print uid, iid, score, timeStamp
-            print "(uid, iid, score, timeStamp)", (uid, iid, score, timeStamp)
-            cursor.execute("insert into user_item values(?, ?, ?, ?)", (uid, iid, score, timeStamp))
-        f.close()
+        uids = set()
+        iids = set()
+        maxUid = 0
+        maxIid = 0
+        for row in data.values:
+            print "row0", row[0], "row1", row[1]
+            uids.add(row[0])
+            iids.add(row[1])
+            if row[0] > maxUid:
+                maxUid = row[0]
+            if row[1] > maxIid:
+                maxIid = row[1]
 
-        #create index
-        print "create index if not exists index_on_user_item_uid_iid on user_item(uid, iid)..."
-        startTime = time.time()
-        cursor.execute("create index if not exists index_on_user_item_uid_iid on user_item(uid, iid)")
-        print "time elapsed ", time.time() - startTime
-        print "create index if not exists index_on_user_item_uid on user_item(uid)..."
-        startTime = time.time()
-        cursor.execute("create index if not exists index_on_user_item_uid on user_item(uid)")
-        print "time elapsed ", time.time() - startTime
-        print "create index if not exists index_on_user_item_iid on user_item(iid)..."
-        startTime = time.time()
-        cursor.execute("create index if not exists index_on_user_item_iid on user_item(iid)")
-        print "time elapsed ", time.time() - startTime
-
-        #建立item到user的表
-        print "create item_users..."
-        startTime = time.time()
-        cursor.execute("create table if not exists item_users as select iid, group_concat(uid) as uids from user_item group by iid")
-        print "time elapsed ", time.time() - startTime
-        print "create index if not exists index_on_item_users_iid on item_users(iid)..."
-        startTime = time.time()
-        cursor.execute("create index if not exists index_on_item_users_iid on item_users(iid)")
-        print "time elapsed ", time.time() - startTime
-        print "create index if not exists index_on_item_users_uids on item_users(uids)..."
-        startTime = time.time()
-        cursor.execute("create index if not exists index_on_item_users_uids on item_users(uids)")
-        print "time elapsed ", time.time() - startTime
-        
-        cursor.execute('''create view if not exists user_score as select
-            uid, avg(score) as avg_score, count(iid) as count_iid from user_item group by uid
-            ''')
-        print "ANALYZE..."
-        startTime = time.time()
-        cursor.execute("ANALYZE")
-        print "time elapsed ", time.time() - startTime
+        print "len(uids)", len(uids), "len(iids)", len(iids)
+        print "maxUid", maxUid, "maxIid", maxIid
+        m = sparse.lil_matrix((maxUid + 1, maxIid + 1), dtype = np.int)
+        for row in data.values:
+            m[row[0], row[1]] = row[2]
 
     #id1,id2相关度，即打过分的物品共有相同的多少个
     rank = collections.OrderedDict()
@@ -121,9 +77,11 @@ if __name__ == "__main__":
     lastUid = 0
     W = {}
     for i, line in enumerate(reader):
+        if i > 3:
+            break
         k = 0
-        iid = line[1]
-        uid = line[0]
+        iid = int(line[1])
+        uid = int(line[0])
         if line[0] not in rank:
             rank[uid] = {}
         if iid not in rank[uid]:
@@ -132,51 +90,34 @@ if __name__ == "__main__":
         similaritySum = 0
         #计算相似度
         #找到自身的平均分及评价过的商品个数
-        print "select avg_score, count_iid from user_score where uid = %s" %(uid,)
-        cursor.execute("select avg_score, count_iid from user_score where uid = ?", (uid,))
-        row = cursor.fetchone()
-        if not row:
-            continue
-        selfAvgScore = row[0]
-        ni = row[1]
+        arrayU = m[uid,:].toarray()
+        ni = np.count_nonzero(arrayU)
+        selfAvgScore = float(arrayU.sum()) / ni  
         print "i", i, "uid", uid, "selfAvgScore", selfAvgScore, "ni", ni 
         #找到和uid相关的所有用户,按相关度降序排序
-        cursor.execute("select distinct uid from user_item where uid <> ?", (uid,))
         if uid != lastUid:
             W = {}
-            for row in cursor:
-                otherUid = row[0]
-                #比较头，中间，尾是否包含指定uid
-                cur1 = conn.cursor()
-                sql1 = "(uids||',' like '%s,%%' or ','||uids||',' like '%%,%s,%%' or ','||uids like '%%,%s')" %(uid, uid, uid)
-                sql2 = "(uids||',' like '%s,%%' or ','||uids||',' like '%%,%s,%%' or ','||uids like '%%,%s')" %(otherUid, otherUid, otherUid)
-                sql = "select count(*) from item_users where  " + sql1 + " and " + sql2
-                #print "sql", sql
-                cur1.execute(sql)
-                row1 = cur1.fetchone()
-                if not row1:
-                    continue
-                W[otherUid] = row1[0]
-                print "calc uid1", uid, "ohteruid", otherUid, "samecount", row1[0]
+            for vid in xrange(maxUid + 1):
+                if uid != vid:
+                    arrayV = m[vid,:].toarray()
+                    #先用sign函数把打过的分转换成1，0，-1，再相与出都是1的个数，就是共同参与过打分的物品数
+                    W[vid] = np.count_nonzero(np.logical_and(np.sign(arrayU), np.sign(arrayV)))
         #计算每个用户对iid的打分
         for u2, w in sorted(W.iteritems(), key = operator.itemgetter(1), reverse = True): 
             uid2 = u2
             sameCount = w
             #找到相关用户对应的平均分及评价物品的个数
-            cur1.execute("select avg_score, count_iid from user_score where uid = ?", (uid2,))
-            row1 = cur1.fetchone()
-            avgScore = row1[0]
-            nj = row1[1]
+            arrayV = m[uid2,:].toarray()
+            nj = np.count_nonzero(arrayV)
+            avgScore = float(arrayV.sum()) / nj
             #相似度
-            wuv = sameCount / math.sqrt(ni * nj)
+            wuv = float(sameCount) / math.sqrt(ni * nj)
             print "uid", uid, "uid2", uid2, "avgScore", avgScore, "nj", nj, "sameCount", sameCount, "wuv", wuv
             if k < K:
-                cur1.execute("select score from user_item where uid = ? and iid = ?", (uid2, iid))
-                row1 = cur1.fetchone()
-                if not row1:
-                    continue
                 #相关用户对iid的打分
-                score = row1[0]
+                score = arrayV[0][iid]
+                if 0 == score:
+                    continue
                 print "k", k, "uid2", uid2, "iid", iid, "score", score
                 scoreSum += wuv * float(float(score) - avgScore)
                 similaritySum += wuv
@@ -188,6 +129,7 @@ if __name__ == "__main__":
         else:
             rank[uid][iid] = selfAvgScore + scoreSum / similaritySum
         lastUid = uid
+
     #print rank
     testFile = open("test.csv", "w")
     writer = csv.writer(testFile)
