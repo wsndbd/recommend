@@ -71,11 +71,13 @@ if __name__ == "__main__":
         print "maxUid", maxUid, "maxIid", maxIid
         print "creating matrix..."
         startTime = time.time()
-        m = sparse.lil_matrix((maxUid + 1, maxIid + 1), dtype = np.int)
+        m = sparse.lil_matrix((maxUid + 1, maxIid + 1), dtype = np.int8)
         for row in data.values:
             #print "row0", row[0], "row1", row[1], "row2", row[2]
             m[row[0], row[1]] = row[2]
         print "eclapsed time", time.time() - startTime
+        #建立各用户的相关性稀疏矩阵
+        mu = sparse.lil_matrix((maxUid + 1, maxUid + 1), dtype = np.int)
 
     #id1,id2相关度，即打过分的物品共有相同的多少个
     rowCount = sum(1 for row in file("../test.csv", "r"))
@@ -113,9 +115,18 @@ if __name__ == "__main__":
             for vid in xrange(maxUid + 1):
                 if uid != vid:
                     #print "uid", uid, "vid", vid, "sameCount",
-                    arrayV = m[vid,:].toarray()
-                    #先用sign函数把打过的分转换成1，0，-1，再相与出都是1的个数，就是共同参与过打分的物品数
-                    W[vid] = np.count_nonzero(np.logical_and(np.sign(arrayU), np.sign(arrayV)))
+                    #如果曾经没有记录过，重新算
+                    if 0 == mu[uid, vid] and 0 == mu[vid, uid]:
+                        arrayV = m[vid,:].toarray()
+                        #先用sign函数把打过的分转换成1，0，-1，再相与出都是1的个数，就是共同参与过打分的物品数
+                        W[vid] = np.count_nonzero(np.logical_and(arrayU, arrayV))
+                        mu[uid, vid] = W[vid]
+                    else:
+                        if 0 != mu[uid, vid]:
+                            W[vid] = mu[uid, vid]
+                        else:
+                            W[vid] = mu[vid, uid]
+
                     #print W[vid]
         #计算每个用户对iid的打分
         print "eclapsed time", time.time() - startTime
