@@ -71,22 +71,13 @@ if __name__ == "__main__":
         print "maxUid", maxUid, "maxIid", maxIid
         print "creating matrix..."
         startTime = time.time()
-        m = sparse.lil_matrix((maxUid + 1, maxIid + 1), dtype = np.int)
+        m = sparse.lil_matrix((maxUid + 1, maxIid + 1), dtype = np.int8)
         for row in data.values:
             #print "row0", row[0], "row1", row[1], "row2", row[2]
             m[row[0], row[1]] = row[2]
         print "eclapsed time", time.time() - startTime
-        
-        #用数据库存储用户相关性数据，越到后期应该速度越快
-        conn = sqlite3.connect("./dict.db")
-        cursor = conn.cursor()
-        cursor.execute('''create table if not exists similarity(
-        uid int not null,
-        vid int not null,
-        same_count int not null,
-        primary key(uid, vid)
-        );
-        ''')
+        #建立各用户的相关性稀疏矩阵
+        mu = sparse.lil_matrix((maxUid + 1, maxUid + 1), dtype = np.int)
 
     #id1,id2相关度，即打过分的物品共有相同的多少个
     rowCount = sum(1 for row in file("../test.csv", "r"))
@@ -110,7 +101,7 @@ if __name__ == "__main__":
         #找到自身的平均分及评价过的商品个数
         if uid >= m.shape[0]:
             print "error row index", uid, " out of bounds", m.shape[0]
-            break
+            continue
         arrayU = m[uid,:].toarray()
         ni = np.count_nonzero(arrayU)
         selfAvgScore = float(arrayU.sum()) / ni  
@@ -124,18 +115,18 @@ if __name__ == "__main__":
             for vid in xrange(maxUid + 1):
                 if uid != vid:
                     #print "uid", uid, "vid", vid, "sameCount",
-                    #先查询数据库中有没有，有的话不需要计算，节省时间
-                    cursor.execute("select same_count from similarity where (uid = ? and vid = ?) or (vid = ? and uid = ?)" ,(uid, vid, uid, vid))
-                    row = cursor.fetchone()
-                    if (row):
-                        #print "select from table uid", uid, "vid", vid, "row", row[0]
-                        W[vid] = int(row[0])
-                    else:
+                    #如果曾经没有记录过，重新算
+                    if 0 == mu[uid, vid] and 0 == mu[vid, uid]:
                         arrayV = m[vid,:].toarray()
                         #先用sign函数把打过的分转换成1，0，-1，再相与出都是1的个数，就是共同参与过打分的物品数
-                        W[vid] = np.count_nonzero(np.logical_and(np.sign(arrayU), np.sign(arrayV)))
-                        cursor.execute("insert into similarity values(?, ?, ?)" ,(uid, vid, W[vid]))
-                        #print "calculate uid", uid, "vid", vid, "W[vid]", W[vid]
+                        W[vid] = np.count_nonzero(np.logical_and(arrayU, arrayV))
+                        mu[uid, vid] = W[vid]
+                    else:
+                        if 0 != mu[uid, vid]:
+                            W[vid] = mu[uid, vid]
+                        else:
+                            W[vid] = mu[vid, uid]
+
                     #print W[vid]
         #计算每个用户对iid的打分
         print "eclapsed time", time.time() - startTime
