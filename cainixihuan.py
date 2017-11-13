@@ -28,6 +28,9 @@ consoleHandler = logging.StreamHandler()
 consoleHandler.setFormatter(logFormatter)
 logger.addHandler(consoleHandler)
 
+TRAINFILE= "../train.csv"
+TESTFILE = "../test.csv"
+
 def silentRemove(filename):
     try:
         os.remove(filename)
@@ -47,7 +50,7 @@ if __name__ == "__main__":
     if reCreate:
         print "pandas reading..."
         startTime = time.time()
-        data = pd.read_csv("../train.csv")
+        data = pd.read_csv(TRAINFILE)
         print "eclapsed time", time.time() - startTime
         #uid,iid,score,time
         uids = set()
@@ -80,10 +83,46 @@ if __name__ == "__main__":
         mu = sparse.lil_matrix((maxUid + 1, maxUid + 1), dtype = np.int)
 
     #id1,id2相关度，即打过分的物品共有相同的多少个
-    rowCount = sum(1 for row in file("../test.csv", "r"))
+    rowCount = sum(1 for row in file(TESTFILE, "r"))
+    lastUid = 0
+    reader = csv.reader(file(TESTFILE, "r"))
+    next(reader)
+    for i, line in enumerate(reader):
+        k = 0
+        iid = int(line[1])
+        uid = int(line[0])
+        #计算相似度
+        #找到自身的平均分及评价过的商品个数
+        if uid >= m.shape[0]:
+            print "error row index", uid, " out of bounds", m.shape[0]
+            continue
+        arrayU = m[uid,:].toarray()
+        ni = np.count_nonzero(arrayU)
+        print "calculate similarrity", i, "of", rowCount
+        startTime = time.time()
+        #print "i", i, "uid", uid, "selfAvgScore", selfAvgScore, "ni", ni,
+        #找到和uid相关的所有用户,按相关度降序排序
+        if uid != lastUid or 0 == lastUid:
+            #print "caclatuing same count"
+            for vid in xrange(maxUid + 1):
+                if uid != vid:
+                    #print "uid", uid, "vid", vid, "sameCount",
+                    #如果曾经没有记录过，重新算
+                    if 0 == mu[uid, vid] and 0 == mu[vid, uid]:
+                        arrayV = m[vid,:].toarray()
+                        #先用sign函数把打过的分转换成1，0，-1，再相与出都是1的个数，就是共同参与过打分的物品数
+                        mu[uid, vid] = np.count_nonzero(np.logical_and(arrayU, arrayV))
+    
+        #print W[vid]
+        #计算每个用户对iid的打分
+        print "eclapsed time", time.time() - startTime
+        lastUid = uid
+
+    #id1,id2相关度，即打过分的物品共有相同的多少个
+    rowCount = sum(1 for row in file(TESTFILE, "r"))
     rank = collections.OrderedDict()
     K = 80
-    reader = csv.reader(file("../test.csv", "r"))
+    reader = csv.reader(file(TESTFILE, "r"))
     next(reader)
     lastUid = 0
     W = {}
@@ -114,20 +153,11 @@ if __name__ == "__main__":
             #print "caclatuing same count"
             for vid in xrange(maxUid + 1):
                 if uid != vid:
-                    #print "uid", uid, "vid", vid, "sameCount",
-                    #如果曾经没有记录过，重新算
-                    if 0 == mu[uid, vid] and 0 == mu[vid, uid]:
-                        arrayV = m[vid,:].toarray()
-                        #先用sign函数把打过的分转换成1，0，-1，再相与出都是1的个数，就是共同参与过打分的物品数
-                        W[vid] = np.count_nonzero(np.logical_and(arrayU, arrayV))
-                        mu[uid, vid] = W[vid]
+                    W[vid] = 0
+                    if 0 != mu[uid, vid]:
+                        W[vid] = mu[uid, vid]
                     else:
-                        if 0 != mu[uid, vid]:
-                            W[vid] = mu[uid, vid]
-                        else:
-                            W[vid] = mu[vid, uid]
-
-                    #print W[vid]
+                        W[vid] = mu[vid, uid]
         #计算每个用户对iid的打分
         print "eclapsed time", time.time() - startTime
         print "calculate score", i, "of", rowCount

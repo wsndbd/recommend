@@ -12,7 +12,6 @@ items = set()
 max_id=0
 max_item_id=0
 for row in data.values:
-    print "row0", row[0], "row1", row[1]
     ids.add(row[0])
     items.add(row[1])
     if row[0] > max_id:
@@ -22,6 +21,7 @@ for row in data.values:
 
 print len(ids),len(items)
 print max_id, max_item_id
+quit()
 mat = sparse.lil_matrix((max_id+1,max_item_id+1), dtype=np.int)
 for row in data.values:
     mat[row[0], row[1]]=row[2]
