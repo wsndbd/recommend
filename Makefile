@@ -3,4 +3,4 @@ cainixihuan: cainixihuan.o
 cainixihuan.o: cainixihuan.cpp
 	g++ -c cainixihuan.cpp
 clean:  
-	rm -fr cainixihuan
+	rm -fr cainixihuan *.o

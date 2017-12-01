@@ -8,6 +8,7 @@
 #include<cmath>  
 #include<cstring>  
 #include<algorithm> 
+#include <sstream>
 
 using namespace std;
 
@@ -96,20 +97,29 @@ class CSVIterator
 		CSVRow              m_row;
 };
 
+#define MAXLEN 256
+
 int main(int argc, char *argv[])
 {
 	map<UIDIID, unsigned char> mapUidIidScores;
+	char trainFileName[MAXLEN] = {0};
+	strncpy(trainFileName, "../train.csv", MAXLEN - 1);
+	if (argc > 1)
+	{
+		strncpy(trainFileName, argv[1], MAXLEN - 1);
+	}
 
-	std::ifstream fin("../train2.csv");
+	std::ifstream fin(trainFileName);
 
 	UIDIID tmp = {0};
+	//生成(uid, iid)与score的map
 	for(CSVIterator loop(fin); loop != CSVIterator(); ++loop)
 	{
-		tmp.uid = (*loop)[0];
-		tmp.iid = (*loop)[1];
-		mapUidIidScores[tmp] = (*loop)[2];
+		tmp.uid = atoi((*loop)[0].c_str());
+		tmp.iid = atoi((*loop)[1].c_str());
+		mapUidIidScores[tmp] = (char)atoi((*loop)[2].c_str());
+		printf("uid %d, iid %d, score %d\n", tmp.uid, tmp.iid, mapUidIidScores[tmp]);
 	}
-	fout.open("train.csv");
 	return 0;
 }
 
